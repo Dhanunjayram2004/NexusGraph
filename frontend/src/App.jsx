@@ -45,10 +45,9 @@ export default function App() {
     setTimeout(() => setToast(null), 4000);
   };
 
-  const sortProjectsByQuery = (items, query) => {
-    if (!query || !query.trim()) return items;
-
-    const normalized = query.trim().toLowerCase();
+  const sortProjectsByQuery = (items, query, domain) => {
+    const normalizedQuery = (query || '').trim().toLowerCase();
+    const normalizedDomain = (domain || '').trim().toLowerCase();
 
     return [...items].sort((a, b) => {
       const score = (project) => {
@@ -61,11 +60,21 @@ export default function App() {
         ].join(' ').toLowerCase();
 
         let s = 0;
-        if (text.includes(normalized)) s += 100;
-        if (project.title && project.title.toLowerCase().includes(normalized)) s += 40;
-        if (project.domain && project.domain.toLowerCase().includes(normalized)) s += 25;
-        if ((project.skills || []).some(skill => skill.toLowerCase().includes(normalized))) s += 25;
-        if ((project.technologies || []).some(tech => tech.toLowerCase().includes(normalized))) s += 25;
+
+        if (normalizedDomain && project.domain && project.domain.toLowerCase() === normalizedDomain) s += 200;
+        if (normalizedDomain && project.domain && project.domain.toLowerCase().includes(normalizedDomain)) s += 120;
+
+        if (normalizedQuery) {
+          if (text.includes(normalizedQuery)) s += 100;
+          if (project.title && project.title.toLowerCase().includes(normalizedQuery)) s += 40;
+          if (project.domain && project.domain.toLowerCase().includes(normalizedQuery)) s += 25;
+          if ((project.skills || []).some(skill => skill.toLowerCase().includes(normalizedQuery))) s += 25;
+          if ((project.technologies || []).some(tech => tech.toLowerCase().includes(normalizedQuery))) s += 25;
+        }
+
+        if (project.status === 'Recruiting') s += 10;
+        if ((project.current_members || 0) < (project.required_members || 3)) s += 5;
+
         return s;
       };
 
@@ -101,7 +110,7 @@ export default function App() {
       } else {
         data = await api.getProjects(activeDomain, null, activeUser?.id);
       }
-      setProjects(sortProjectsByQuery(data || [], debouncedQuery));
+      setProjects(sortProjectsByQuery(data || [], debouncedQuery, activeDomain));
       setBackendConnected(true);
     } catch (err) {
       console.error(err);
