@@ -87,22 +87,19 @@ body {
 .nav-container {
   position: relative;
   z-index: 1;
-  width: 100%;
-  max-width: 100%;
+  max-width: 1240px;
   margin: 0 auto;
   padding: 0 20px;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 14px;
+  gap: 20px;
 }
 
 .nav-left {
   display: flex;
   align-items: center;
-  gap: 20px;
-  min-width: 0;
-  flex: 1 1 auto;
+  gap: 28px;
 }
 
 .brand {
@@ -165,9 +162,8 @@ body {
 .nav-center {
   position: relative;
   z-index: 10;
-  flex: 1 1 360px;
-  max-width: 420px;
-  min-width: 0;
+  flex: 1;
+  max-width: 380px;
 }
 
 .search-bar {
@@ -179,8 +175,7 @@ body {
   border: 1px solid var(--border-color);
   border-radius: var(--border-radius-button); /* Sharp corners */
   padding: 6px 12px;
-  min-width: 0;
-  width: 100%;
+  min-width: 280px; /* Forces the bar to stay wide */
   gap: 8px;
   transition: border-color 0.2s ease;
 }
@@ -216,7 +211,6 @@ body {
   display: flex;
   align-items: center;
   gap: 12px;
-  flex-shrink: 0;
 }
 
 .status-pill {
@@ -280,7 +274,6 @@ body {
   gap: 6px;
   cursor: pointer;
   transition: opacity 0.2s;
-  white-space: nowrap;
 }
 .btn-primary:hover {
   opacity: 0.9;
