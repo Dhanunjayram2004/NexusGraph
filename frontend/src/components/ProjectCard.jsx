@@ -1,6 +1,16 @@
 import React from 'react';
 import { Users, Code, Cpu, ChevronRight, UserPlus, Sparkles, Check } from 'lucide-react';
 
+const normalizeUserId = (value) => {
+  if (value === null || value === undefined) return '';
+  const str = String(value).trim();
+  if (!str) return '';
+  const match = /^user_(\d+)$/i.exec(str);
+  return match ? `u${match[1]}` : str;
+};
+
+const matchesUserId = (a, b) => String(normalizeUserId(a)) === String(normalizeUserId(b));
+
 export default function ProjectCard({ 
   project, 
   onViewDetails, 
@@ -18,8 +28,8 @@ export default function ProjectCard({
   const rawSeats = (project.current_members || 0) + (creatorExists ? 1 : 0);
   const required = project.required_members || 3;
   const isCreator =
-  project.creator?.id === currentUserId ||
-  project.creator_id === currentUserId;
+    matchesUserId(project.creator?.id, currentUserId) ||
+    matchesUserId(project.creator_id, currentUserId);
   
   const occupiedSeats = Math.min(rawSeats, required);
   const capacityPct = Math.min(100, Math.round((occupiedSeats / required) * 100));
@@ -27,7 +37,7 @@ export default function ProjectCard({
   const isRecruiting = project.status === 'Recruiting';
   // Check if actually full based on raw seats to disable button
   const actualIsFull = rawSeats >= required;
-  const userHasJoined = project.joined === true || (currentUserId && (project.members || []).some(member => String(member.id) === String(currentUserId)));
+  const userHasJoined = project.joined === true || (currentUserId && (project.members || []).some(member => matchesUserId(member.id, currentUserId)));
 
   return (
     <div className={`project-card ${!isRecruiting ? 'status-active' : ''}`}>

@@ -2,6 +2,16 @@ import React, { useEffect, useState } from 'react';
 import { X, Users, Code, Cpu, CheckCircle2, UserPlus, Layers, ShieldCheck, Check } from 'lucide-react';
 import { api } from '../api/config';
 
+const normalizeUserId = (value) => {
+  if (value === null || value === undefined) return '';
+  const str = String(value).trim();
+  if (!str) return '';
+  const match = /^user_(\d+)$/i.exec(str);
+  return match ? `u${match[1]}` : str;
+};
+
+const matchesUserId = (a, b) => String(normalizeUserId(a)) === String(normalizeUserId(b));
+
 export default function ProjectDetailModal({ project, onClose, onJoin, onLeave, currentUserId, isJoined }) {
   const [details, setDetails] = useState(project);
   const [loading, setLoading] = useState(true);
@@ -31,12 +41,12 @@ export default function ProjectDetailModal({ project, onClose, onJoin, onLeave, 
 
 // 1. Check for both creator object AND creator_id from backend
   const isCreator = currentUserId && (
-    String(details.creator?.id) === String(currentUserId) || 
-    String(details.creator_id) === String(currentUserId)
+    matchesUserId(details.creator?.id, currentUserId) ||
+    matchesUserId(details.creator_id, currentUserId)
   );
 
   // 2. Bulletproof joined check: check if user exists in the members array
-  const isMember = details.members?.some(m => String(m.id) === String(currentUserId));
+  const isMember = details.members?.some(m => matchesUserId(m.id, currentUserId));
   const effectiveJoined = details.joined || isJoined || isMember;
 
   // 3. Fix capacity overflow (cap at max required)
