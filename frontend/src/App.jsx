@@ -45,6 +45,34 @@ export default function App() {
     setTimeout(() => setToast(null), 4000);
   };
 
+  const sortProjectsByQuery = (items, query) => {
+    if (!query || !query.trim()) return items;
+
+    const normalized = query.trim().toLowerCase();
+
+    return [...items].sort((a, b) => {
+      const score = (project) => {
+        const text = [
+          project.title,
+          project.description,
+          project.domain,
+          ...(project.skills || []),
+          ...(project.technologies || [])
+        ].join(' ').toLowerCase();
+
+        let s = 0;
+        if (text.includes(normalized)) s += 100;
+        if (project.title && project.title.toLowerCase().includes(normalized)) s += 40;
+        if (project.domain && project.domain.toLowerCase().includes(normalized)) s += 25;
+        if ((project.skills || []).some(skill => skill.toLowerCase().includes(normalized))) s += 25;
+        if ((project.technologies || []).some(tech => tech.toLowerCase().includes(normalized))) s += 25;
+        return s;
+      };
+
+      return score(b) - score(a);
+    });
+  };
+
   // Fetch users from backend or fallback to initial
   const loadUsers = useCallback(async () => {
     try {
@@ -73,7 +101,7 @@ export default function App() {
       } else {
         data = await api.getProjects(activeDomain, null, activeUser?.id);
       }
-      setProjects(data || []);
+      setProjects(sortProjectsByQuery(data || [], debouncedQuery));
       setBackendConnected(true);
     } catch (err) {
       console.error(err);
