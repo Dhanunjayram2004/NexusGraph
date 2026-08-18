@@ -5,6 +5,45 @@ from pydantic import BaseModel
 
 router = APIRouter(prefix="/projects", tags=["Projects"])
 
+LEGACY_USER_ID_MAP = {
+    "user_1": "u1",
+    "user_2": "u2",
+    "user_3": "u3",
+    "user_4": "u4",
+    "user_5": "u5",
+    "user_6": "u6",
+    "user_7": "u7",
+    "user_8": "u8",
+    "user_9": "u9",
+}
+
+
+def normalize_user_id(user_id: Optional[str]) -> str:
+    if user_id is None:
+        return ""
+    value = str(user_id).strip()
+    if not value:
+        return ""
+    lower = value.lower()
+    if lower in LEGACY_USER_ID_MAP:
+        return LEGACY_USER_ID_MAP[lower]
+    if lower.startswith("user_") and lower[5:].isdigit():
+        return f"u{lower[5:]}"
+    return value
+
+
+def user_id_candidates(user_id: Optional[str]) -> List[str]:
+    normalized = normalize_user_id(user_id)
+    candidates = []
+    for value in [normalized, user_id.strip() if isinstance(user_id, str) else ""]:
+        if value and value not in candidates:
+            candidates.append(value)
+    if normalized.startswith("u") and normalized[1:].isdigit():
+        legacy = f"user_{normalized[1:]}"
+        if legacy not in candidates:
+            candidates.append(legacy)
+    return [candidate for candidate in candidates if candidate]
+
 class CreateProjectRequest(BaseModel):
     title: str
     description: str
@@ -16,12 +55,13 @@ class CreateProjectRequest(BaseModel):
 
 @router.get("/")
 def get_projects(domain: Optional[str] = None, status: Optional[str] = None, user_id: Optional[str] = None):
+    user_ids = user_id_candidates(user_id)
     with db.driver.session() as session:
         cypher = """
         MATCH (p:Project)
         WHERE ($domain IS NULL OR EXISTS { MATCH (p)-[:IN_DOMAIN]->(:Domain {name: $domain}) })
           AND ($status IS NULL OR p.status = $status)
-          
+
         RETURN p.id AS id,
                p.title AS title,
                p.description AS description,
@@ -33,10 +73,10 @@ def get_projects(domain: Optional[str] = None, status: Optional[str] = None, use
                [(p)-[:REQUIRES_SKILL]->(s:Skill) | s.name] AS skills,
                [(p)-[:USES_TECH]->(t:Technology) | t.name] AS technologies,
                size([(p)<-[:JOINED]-(m:User) | m]) AS current_members,
-               $user_id IS NOT NULL AND EXISTS { MATCH (:User {id: $user_id})-[:JOINED]->(p) } AS joined
+               $user_id IS NOT NULL AND EXISTS { MATCH (u:User)-[:JOINED]->(p) WHERE u.id IN $user_ids } AS joined
         ORDER BY id ASC
         """
-        result = session.run(cypher, domain=domain, status=status, user_id=user_id)
+        result = session.run(cypher, domain=domain, status=status, user_id=user_id, user_ids=user_ids)
         
         projects = []
         for record in result:
@@ -60,6 +100,7 @@ def get_projects(domain: Optional[str] = None, status: Optional[str] = None, use
 
 @router.get("/search")
 def search_projects(q: str = Query(...), user_id: Optional[str] = None, domain: Optional[str] = None):
+    user_ids = user_id_candidates(user_id)
     with db.driver.session() as session:
         cypher = """
         MATCH (p:Project)
@@ -95,11 +136,11 @@ def search_projects(q: str = Query(...), user_id: Optional[str] = None, domain: 
                skills,
                technologies,
                size([(p)<-[:JOINED]-(m:User) | m]) AS current_members,
-               $user_id IS NOT NULL AND EXISTS { MATCH (:User {id: $user_id})-[:JOINED]->(p) } AS joined,
+               $user_id IS NOT NULL AND EXISTS { MATCH (u:User)-[:JOINED]->(p) WHERE u.id IN $user_ids } AS joined,
                graph_score
         ORDER BY graph_score DESC, p.id ASC
         """
-        result = session.run(cypher, q=q.strip(), user_id=user_id, domain=domain)
+        result = session.run(cypher, q=q.strip(), user_id=user_id, user_ids=user_ids, domain=domain)
 
         projects = []
         for record in result:
@@ -125,6 +166,7 @@ def search_projects(q: str = Query(...), user_id: Optional[str] = None, domain: 
 @router.get("/{project_id}")
 def get_project(project_id: str, user_id: Optional[str] = None):
     pid = project_id.strip()
+    user_ids = user_id_candidates(user_id)
     with db.driver.session() as session:
         cypher = """
         MATCH (p:Project {id: $pid})
@@ -140,9 +182,9 @@ def get_project(project_id: str, user_id: Optional[str] = None):
                [(p)-[:USES_TECH]->(t:Technology) | t.name] AS technologies,
                size([(p)<-[:JOINED]-(m:User) | m]) AS current_members,
                [(p)<-[:JOINED]-(m:User) | {id: m.id, name: m.name, level: m.level}] AS members,
-               $user_id IS NOT NULL AND EXISTS { MATCH (:User {id: $user_id})-[:JOINED]->(p) } AS joined
+               $user_id IS NOT NULL AND EXISTS { MATCH (u:User)-[:JOINED]->(p) WHERE u.id IN $user_ids } AS joined
         """
-        record = session.run(cypher, pid=pid, user_id=user_id).single()
+        record = session.run(cypher, pid=pid, user_id=user_id, user_ids=user_ids).single()
 
         if not record or record["id"] is None:
             raise HTTPException(status_code=404, detail="Project not found")
@@ -186,17 +228,19 @@ def get_project_members(project_id: str):
 @router.post("/{project_id}/join")
 def join_project(project_id: str, user_id: str):
     pid = project_id.strip()
-    uid = user_id.strip()
+    uid = normalize_user_id(user_id)
+    user_ids = user_id_candidates(user_id)
 
     with db.driver.session() as session:
         check_cypher = """
         MATCH (p:Project {id: $pid})
-        MATCH (u:User {id: $uid})
-        RETURN EXISTS { MATCH (u)-[:JOINED]->(p) } AS already_joined,
+        MATCH (u:User)
+        WHERE u.id IN $user_ids
+        RETURN EXISTS { MATCH (u)-[:JOINED]->(p) WHERE u.id IN $user_ids } AS already_joined,
                size([(p)<-[:JOINED]-(m:User) | m]) AS current_members,
                toInteger(coalesce(p.required_members, p.req_members, 3)) AS required_members
         """
-        res = session.run(check_cypher, pid=pid, uid=uid).single()
+        res = session.run(check_cypher, pid=pid, user_ids=user_ids).single()
 
         if not res:
             raise HTTPException(status_code=404, detail="Project or User not found in database")
@@ -210,7 +254,9 @@ def join_project(project_id: str, user_id: str):
 
         join_cypher = """
         MATCH (p:Project {id: $pid})
-        MATCH (u:User {id: $uid})
+        MATCH (u:User)
+        WHERE u.id IN $user_ids
+        WITH p, u
         MERGE (u)-[:JOINED]->(p)
         WITH p
         WITH p, size([(p)<-[:JOINED]-(m:User) | m]) AS total_members,
@@ -218,7 +264,7 @@ def join_project(project_id: str, user_id: str):
         SET p.status = CASE WHEN total_members >= req THEN 'Active' ELSE 'Recruiting' END
         RETURN p.id AS id, p.status AS status, total_members, req
         """
-        updated = session.run(join_cypher, pid=pid, uid=uid).single()
+        updated = session.run(join_cypher, pid=pid, user_ids=user_ids).single()
 
         return {
             "message": "Successfully joined team!",
@@ -231,16 +277,18 @@ def join_project(project_id: str, user_id: str):
 @router.post("/{project_id}/leave")
 def leave_project(project_id: str, user_id: str):
     pid = project_id.strip()
-    uid = user_id.strip()
+    uid = normalize_user_id(user_id)
+    user_ids = user_id_candidates(user_id)
 
     with db.driver.session() as session:
         check_cypher = """
-MATCH (p:Project {id: $pid})
-MATCH (u:User {id: $uid})
-RETURN EXISTS { MATCH (u)-[:JOINED]->(p) } AS is_joined,
-       [(p)<-[:CREATED]-(c:User) | c.id][0] = $uid AS is_creator
-"""
-        res = session.run(check_cypher, pid=pid, uid=uid).single()
+        MATCH (p:Project {id: $pid})
+        MATCH (u:User)
+        WHERE u.id IN $user_ids
+        RETURN EXISTS { MATCH (u)-[:JOINED]->(p) WHERE u.id IN $user_ids } AS is_joined,
+               any(id IN $user_ids WHERE id = [(p)<-[:CREATED]-(c:User) | c.id][0]) AS is_creator
+        """
+        res = session.run(check_cypher, pid=pid, user_ids=user_ids).single()
 
         if not res:
             raise HTTPException(status_code=404, detail="Project or User not found")
@@ -250,7 +298,8 @@ RETURN EXISTS { MATCH (u)-[:JOINED]->(p) } AS is_joined,
             raise HTTPException(status_code=400, detail="You have not joined this project")
 
         leave_cypher = """
-        MATCH (u:User {id: $uid})-[j:JOINED]->(p:Project {id: $pid})
+        MATCH (u:User)-[j:JOINED]->(p:Project {id: $pid})
+        WHERE u.id IN $user_ids
         DELETE j
         WITH p
         WITH p, size([(p)<-[:JOINED]-(m:User) | m]) AS total_members,
@@ -258,7 +307,7 @@ RETURN EXISTS { MATCH (u)-[:JOINED]->(p) } AS is_joined,
         SET p.status = CASE WHEN total_members >= req THEN 'Active' ELSE 'Recruiting' END
         RETURN p.id AS id, p.status AS status, total_members, req
         """
-        updated = session.run(leave_cypher, pid=pid, uid=uid).single()
+        updated = session.run(leave_cypher, pid=pid, user_ids=user_ids).single()
 
         return {
             "message": "You have left the project team.",
@@ -271,10 +320,12 @@ RETURN EXISTS { MATCH (u)-[:JOINED]->(p) } AS is_joined,
 def create_project(data: CreateProjectRequest):
     import uuid
     project_id = f"proj_{uuid.uuid4().hex[:8]}"
+    creator_id = normalize_user_id(data.creator_id)
 
     with db.driver.session() as session:
         cypher = """
-        MATCH (creator:User {id: $creator_id})
+        MATCH (creator:User)
+        WHERE creator.id IN $creator_ids
         MERGE (d:Domain {name: $domain})
         CREATE (p:Project {
             id: $project_id,
@@ -298,7 +349,7 @@ def create_project(data: CreateProjectRequest):
         result = session.run(
             cypher,
             project_id=project_id,
-            creator_id=data.creator_id,
+            creator_ids=user_id_candidates(creator_id),
             domain=data.domain,
             title=data.title,
             description=data.description,
