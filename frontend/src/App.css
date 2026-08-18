@@ -77,7 +77,7 @@ body {
 .navbar {
   position: sticky;
   top: 0;
-  z-index: 100;
+  z-index: 200;
   background: rgba(10, 13, 20, 0.85);
   backdrop-filter: var(--glass-blur);
   border-bottom: 1px solid var(--border-color);
@@ -85,6 +85,8 @@ body {
 }
 
 .nav-container {
+  position: relative;
+  z-index: 1;
   max-width: 1240px;
   margin: 0 auto;
   padding: 0 20px;
@@ -158,11 +160,15 @@ body {
 }
 
 .nav-center {
+  position: relative;
+  z-index: 10;
   flex: 1;
   max-width: 380px;
 }
 
 .search-bar {
+  position: relative;
+  z-index: 20;
   display: flex;
   align-items: center;
   background-color: var(--bg-surface);
@@ -691,18 +697,18 @@ body {
   align-items: center;
   justify-content: center;
   z-index: 500;
-  padding: 20px;
+  padding: 12px;
 }
 
 .modal-content {
   background: var(--bg-secondary);
   border: 1px solid var(--border-color);
   border-radius: var(--radius-lg);
-  width: 100%;
-  max-width: 640px;
-  max-height: 90vh;
+  width: min(100%, 640px);
+  max-width: min(640px, calc(100vw - 20px));
+  max-height: calc(100vh - 24px);
   overflow-y: auto;
-  padding: 32px;
+  padding: 24px 20px 20px;
   position: relative;
   box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.7);
 }
@@ -871,7 +877,7 @@ body {
 .project-form {
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: 12px;
 }
 .form-group {
   display: flex;
@@ -893,10 +899,16 @@ body {
   color: var(--text-primary);
   font-size: 0.86rem;
   outline: none;
+  width: 100%;
+  box-sizing: border-box;
 }
 .form-group input:focus,
 .form-group textarea:focus {
   border-color: var(--accent-indigo);
+}
+.form-group textarea {
+  min-height: 90px;
+  resize: vertical;
 }
 .form-row {
   display: grid;
@@ -1108,4 +1120,13 @@ body {
   .hero-headline { font-size: 2rem; }
   .card-grid { grid-template-columns: 1fr; }
   .details-grid { grid-template-columns: 1fr; }
+  .form-row { grid-template-columns: 1fr; }
+  .modal-content {
+    max-width: calc(100vw - 16px);
+    max-height: calc(100vh - 16px);
+    padding: 20px 16px 16px;
+  }
+  .modal-title {
+    font-size: 1.25rem;
+  }
 }
