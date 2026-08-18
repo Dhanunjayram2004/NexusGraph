@@ -104,13 +104,16 @@ export default function App() {
       // We are now using debouncedQuery instead of searchQuery here!
       if (debouncedQuery.trim()) {
         data = await api.search(
-  debouncedQuery.trim(),
-  activeUser?.id
-);
+          debouncedQuery.trim(),
+          activeUser?.id,
+          activeDomain
+        );
       } else {
         data = await api.getProjects(activeDomain, null, activeUser?.id);
       }
-      setProjects(sortProjectsByQuery(data || [], debouncedQuery, activeDomain));
+
+      const ordered = sortProjectsByQuery(data || [], debouncedQuery, activeDomain);
+      setProjects(ordered);
       setBackendConnected(true);
     } catch (err) {
       console.error(err);
@@ -185,22 +188,38 @@ const handleJoinProject = async (projectId) => {
 
     console.log("JOIN API RESPONSE:", res);
 
-    // Force joined state to true
+    const nextJoined = res.already_joined === true || res.message?.toLowerCase().includes('already') || res.message?.toLowerCase().includes('joined');
+
     setProjects(prev =>
       prev.map(p =>
         p.id === projectId
-          ? { ...p, joined: true, current_members: res.current_members ?? p.current_members, status: res.status ?? p.status }
+          ? {
+              ...p,
+              joined: true,
+              current_members: res.current_members ?? p.current_members,
+              status: res.status ?? p.status,
+            }
           : p
       )
     );
 
     setSelectedProject(prev =>
       prev && prev.id === projectId
-        ? { ...prev, joined: true, current_members: res.current_members ?? prev.current_members, status: res.status ?? prev.status }
+        ? {
+            ...prev,
+            joined: true,
+            current_members: res.current_members ?? prev.current_members,
+            status: res.status ?? prev.status,
+            members: prev.members || [],
+          }
         : prev
     );
 
-    showToast(res.message || "Successfully joined project team!", "success");
+    if (nextJoined) {
+      showToast("You are already in this project", "error");
+    } else {
+      showToast(res.message || "Successfully joined project team!", "success");
+    }
 
     await refreshSingleProject(projectId);
     await loadRecommendations();
@@ -211,6 +230,8 @@ const handleJoinProject = async (projectId) => {
       err.message || "Could not join project",
       "error"
     );
+
+    await refreshSingleProject(projectId);
   }
 finally {
     setPendingJoins(prev => {

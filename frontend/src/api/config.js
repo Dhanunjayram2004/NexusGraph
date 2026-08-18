@@ -57,11 +57,11 @@ export const api = {
   
   // FIXED: Both search and getRecommendations are securely here now!
 // Add the slash right after search and before ?q=
-search: (query, userId) =>
+search: (query, userId, domain = null) =>
   apiRequest(
     `/projects/search?q=${encodeURIComponent(query)}${
       userId ? `&user_id=${encodeURIComponent(userId)}` : ''
-    }`
+    }${domain ? `&domain=${encodeURIComponent(domain)}` : ''}`
   ),
   getUsers: () => apiRequest('/users/'),
   getRecommendations: (userId) => apiRequest(`/search/recommendations/${encodeURIComponent(userId)}`),
