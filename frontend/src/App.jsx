@@ -149,35 +149,23 @@ const handleJoinProject = async (projectId) => {
 
     console.log("JOIN API RESPONSE:", res);
 
-    const nextCurrentMembers = Number.isFinite(Number(res.current_members)) ? Number(res.current_members) : undefined;
-
+    // Force joined state to true
     setProjects(prev =>
       prev.map(p =>
         p.id === projectId
-          ? {
-              ...p,
-              joined: true,
-              current_members: nextCurrentMembers ?? p.current_members,
-              status: res.status ?? p.status,
-            }
+          ? { ...p, joined: true, current_members: res.current_members ?? p.current_members, status: res.status ?? p.status }
           : p
       )
     );
 
     setSelectedProject(prev =>
       prev && prev.id === projectId
-        ? {
-            ...prev,
-            joined: true,
-            current_members: nextCurrentMembers ?? prev.current_members,
-            status: res.status ?? prev.status,
-          }
+        ? { ...prev, joined: true, current_members: res.current_members ?? prev.current_members, status: res.status ?? prev.status }
         : prev
     );
 
     showToast(res.message || "Successfully joined project team!", "success");
 
-    await loadProjects();
     await refreshSingleProject(projectId);
     await loadRecommendations();
   } catch (err) {
