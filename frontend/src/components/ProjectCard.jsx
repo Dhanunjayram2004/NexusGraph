@@ -27,6 +27,7 @@ export default function ProjectCard({
   const isRecruiting = project.status === 'Recruiting';
   // Check if actually full based on raw seats to disable button
   const actualIsFull = rawSeats >= required;
+  const userHasJoined = project.joined === true || (currentUserId && (project.members || []).some(member => String(member.id) === String(currentUserId)));
 
   return (
     <div className={`project-card ${!isRecruiting ? 'status-active' : ''}`}>
@@ -103,30 +104,30 @@ export default function ProjectCard({
           {/* Dynamic Buttons using your .btn-join and .btn-joined classes */}
           {isCreator ? (
             <button className="btn-join" disabled>Creator</button>
-          ) : project.joined === true ? (
-  <button 
-  className="btn-join btn-joined" 
-  disabled={isPending}
-  onClick={(e) => { 
-    e.stopPropagation(); 
-    onLeave(project.id); 
-  }}
->
-  {isPending ? 'Leaving...' : 'Leave Team'}
-</button>
-) : isFull ? (
+          ) : userHasJoined ? (
+            <button 
+              className="btn-join btn-joined" 
+              disabled={isPending}
+              onClick={(e) => { 
+                e.stopPropagation(); 
+                onLeave(project.id); 
+              }}
+            >
+              {isPending ? 'Leaving...' : 'Joined'}
+            </button>
+          ) : isFull ? (
             <button className="btn-join" disabled>Full</button>
           ) : (
             <button 
-  className="btn-join" 
-  disabled={isPending}
-  onClick={(e) => { 
-    e.stopPropagation(); 
-    onJoin(project.id); 
-  }}
->
-  <span className="icon">+</span> {isPending ? 'Joining...' : 'Join Team'}
-</button>
+              className="btn-join" 
+              disabled={isPending}
+              onClick={(e) => { 
+                e.stopPropagation(); 
+                onJoin(project.id); 
+              }}
+            >
+              <span className="icon">+</span> {isPending ? 'Joining...' : 'Join Team'}
+            </button>
           )}
         </div>
       </div>

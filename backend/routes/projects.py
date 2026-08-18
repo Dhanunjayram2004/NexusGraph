@@ -200,20 +200,11 @@ def join_project(project_id: str, user_id: str):
 
         if not res:
             raise HTTPException(status_code=404, detail="Project or User not found in database")
+        if res["already_joined"]:
+            raise HTTPException(status_code=400, detail="You have already joined this project")
 
         req_members = int(res["required_members"] or 3)
         curr_members = int(res["current_members"] or 0)
-
-        if res["already_joined"]:
-            return {
-                "message": "You are already in this project",
-                "project_id": pid,
-                "status": "Recruiting",
-                "current_members": curr_members,
-                "required_members": req_members,
-                "already_joined": True,
-            }
-
         if curr_members >= req_members:
             raise HTTPException(status_code=400, detail="Project team is already full")
 
@@ -234,8 +225,7 @@ def join_project(project_id: str, user_id: str):
             "project_id": updated["id"],
             "status": updated["status"],
             "current_members": updated["total_members"],
-            "required_members": updated["req"],
-            "already_joined": False,
+            "required_members": updated["req"]
         }
 
 @router.post("/{project_id}/leave")

@@ -45,43 +45,6 @@ export default function App() {
     setTimeout(() => setToast(null), 4000);
   };
 
-  const sortProjectsByQuery = (items, query, domain) => {
-    const normalizedQuery = (query || '').trim().toLowerCase();
-    const normalizedDomain = (domain || '').trim().toLowerCase();
-
-    return [...items].sort((a, b) => {
-      const score = (project) => {
-        const text = [
-          project.title,
-          project.description,
-          project.domain,
-          ...(project.skills || []),
-          ...(project.technologies || [])
-        ].join(' ').toLowerCase();
-
-        let s = 0;
-
-        if (normalizedDomain && project.domain && project.domain.toLowerCase() === normalizedDomain) s += 200;
-        if (normalizedDomain && project.domain && project.domain.toLowerCase().includes(normalizedDomain)) s += 120;
-
-        if (normalizedQuery) {
-          if (text.includes(normalizedQuery)) s += 100;
-          if (project.title && project.title.toLowerCase().includes(normalizedQuery)) s += 40;
-          if (project.domain && project.domain.toLowerCase().includes(normalizedQuery)) s += 25;
-          if ((project.skills || []).some(skill => skill.toLowerCase().includes(normalizedQuery))) s += 25;
-          if ((project.technologies || []).some(tech => tech.toLowerCase().includes(normalizedQuery))) s += 25;
-        }
-
-        if (project.status === 'Recruiting') s += 10;
-        if ((project.current_members || 0) < (project.required_members || 3)) s += 5;
-
-        return s;
-      };
-
-      return score(b) - score(a);
-    });
-  };
-
   // Fetch users from backend or fallback to initial
   const loadUsers = useCallback(async () => {
     try {
@@ -104,16 +67,14 @@ export default function App() {
       // We are now using debouncedQuery instead of searchQuery here!
       if (debouncedQuery.trim()) {
         data = await api.search(
-          debouncedQuery.trim(),
-          activeUser?.id,
-          activeDomain
-        );
+  debouncedQuery.trim(),
+  activeUser?.id,
+  activeDomain
+);
       } else {
         data = await api.getProjects(activeDomain, null, activeUser?.id);
       }
-
-      const ordered = sortProjectsByQuery(data || [], debouncedQuery, activeDomain);
-      setProjects(ordered);
+      setProjects(data || []);
       setBackendConnected(true);
     } catch (err) {
       console.error(err);
@@ -188,7 +149,7 @@ const handleJoinProject = async (projectId) => {
 
     console.log("JOIN API RESPONSE:", res);
 
-    const nextJoined = res.already_joined === true || res.message?.toLowerCase().includes('already') || res.message?.toLowerCase().includes('joined');
+    const nextCurrentMembers = Number.isFinite(Number(res.current_members)) ? Number(res.current_members) : undefined;
 
     setProjects(prev =>
       prev.map(p =>
@@ -196,7 +157,7 @@ const handleJoinProject = async (projectId) => {
           ? {
               ...p,
               joined: true,
-              current_members: res.current_members ?? p.current_members,
+              current_members: nextCurrentMembers ?? p.current_members,
               status: res.status ?? p.status,
             }
           : p
@@ -208,19 +169,15 @@ const handleJoinProject = async (projectId) => {
         ? {
             ...prev,
             joined: true,
-            current_members: res.current_members ?? prev.current_members,
+            current_members: nextCurrentMembers ?? prev.current_members,
             status: res.status ?? prev.status,
-            members: prev.members || [],
           }
         : prev
     );
 
-    if (nextJoined) {
-      showToast("You are already in this project", "error");
-    } else {
-      showToast(res.message || "Successfully joined project team!", "success");
-    }
+    showToast(res.message || "Successfully joined project team!", "success");
 
+    await loadProjects();
     await refreshSingleProject(projectId);
     await loadRecommendations();
   } catch (err) {
@@ -230,8 +187,6 @@ const handleJoinProject = async (projectId) => {
       err.message || "Could not join project",
       "error"
     );
-
-    await refreshSingleProject(projectId);
   }
 finally {
     setPendingJoins(prev => {
