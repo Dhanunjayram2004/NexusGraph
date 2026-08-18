@@ -1,0 +1,25 @@
+GRAPH_MODEL = {
+    "nodes": [
+        "User",
+        "Project",
+        "Skill",
+        "Domain",
+        "Technology",
+        "Task",
+        "Message",
+    ],
+    "relationships": [
+        "CREATED",
+        "JOINED",
+        "COMPLETED",
+        "LIKED",
+        "HAS_SKILL",
+        "INTERESTED_IN",
+        "REQUIRES_SKILL",
+        "IN_DOMAIN",
+        "USES_TECH",
+        "HAS_TASK",
+        "ASSIGNED_TO",
+        "MENTORS",
+    ],
+}
