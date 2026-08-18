@@ -59,16 +59,31 @@ def get_projects(domain: Optional[str] = None, status: Optional[str] = None, use
         return projects
 
 @router.get("/search")
-def search_projects(q: str = Query(...), user_id: Optional[str] = None):
+def search_projects(q: str = Query(...), user_id: Optional[str] = None, domain: Optional[str] = None):
     with db.driver.session() as session:
         cypher = """
         MATCH (p:Project)
-        // Using CONTAINS for flexible partial matching
-        WHERE EXISTS { MATCH (p)-[:REQUIRES_SKILL]->(s:Skill) WHERE toLower(s.name) CONTAINS toLower($q) }
-           OR EXISTS { MATCH (p)-[:USES_TECH]->(t:Technology) WHERE toLower(t.name) CONTAINS toLower($q) }
-           OR EXISTS { MATCH (p)-[:IN_DOMAIN]->(d:Domain) WHERE toLower(d.name) CONTAINS toLower($q) }
-           OR toLower(p.title) CONTAINS toLower($q)
-
+        WHERE ($domain IS NULL OR EXISTS { MATCH (p)-[:IN_DOMAIN]->(:Domain {name: $domain}) })
+          AND (
+              EXISTS { MATCH (p)-[:REQUIRES_SKILL]->(s:Skill) WHERE toLower(s.name) CONTAINS toLower($q) }
+              OR EXISTS { MATCH (p)-[:USES_TECH]->(t:Technology) WHERE toLower(t.name) CONTAINS toLower($q) }
+              OR EXISTS { MATCH (p)-[:IN_DOMAIN]->(d:Domain) WHERE toLower(d.name) CONTAINS toLower($q) }
+              OR toLower(p.title) CONTAINS toLower($q)
+          )
+        WITH p, $domain AS selected_domain, $q AS search_term
+        OPTIONAL MATCH (p)-[:IN_DOMAIN]->(d:Domain)
+        OPTIONAL MATCH (p)-[:REQUIRES_SKILL]->(s:Skill)
+        OPTIONAL MATCH (p)-[:USES_TECH]->(t:Technology)
+        WITH p, d, collect(DISTINCT s.name) AS skills, collect(DISTINCT t.name) AS technologies,
+             selected_domain,
+             search_term,
+             (
+                 100 * CASE WHEN toLower(p.title) CONTAINS toLower(search_term) THEN 1 ELSE 0 END +
+                 80 * CASE WHEN EXISTS { MATCH (p)-[:REQUIRES_SKILL]->(s2:Skill) WHERE toLower(s2.name) CONTAINS toLower(search_term) } THEN 1 ELSE 0 END +
+                 70 * CASE WHEN EXISTS { MATCH (p)-[:USES_TECH]->(t2:Technology) WHERE toLower(t2.name) CONTAINS toLower(search_term) } THEN 1 ELSE 0 END +
+                 60 * CASE WHEN EXISTS { MATCH (p)-[:IN_DOMAIN]->(d2:Domain) WHERE toLower(d2.name) CONTAINS toLower(search_term) } THEN 1 ELSE 0 END +
+                 30 * CASE WHEN selected_domain IS NOT NULL AND d.name = selected_domain THEN 1 ELSE 0 END
+             ) AS graph_score
         RETURN p.id AS id,
                p.title AS title,
                p.description AS description,
@@ -76,15 +91,16 @@ def search_projects(q: str = Query(...), user_id: Optional[str] = None):
                toInteger(coalesce(p.required_members, p.req_members, 3)) AS required_members,
                [(p)<-[:CREATED]-(c:User) | c.id][0] AS creator_id,
                [(p)<-[:CREATED]-(c:User) | c.name][0] AS creator_name,
-               [(p)-[:IN_DOMAIN]->(d:Domain) | d.name][0] AS domain,
-               [(p)-[:REQUIRES_SKILL]->(s:Skill) | s.name] AS skills,
-               [(p)-[:USES_TECH]->(t:Technology) | t.name] AS technologies,
+               d.name AS domain,
+               skills,
+               technologies,
                size([(p)<-[:JOINED]-(m:User) | m]) AS current_members,
-               $user_id IS NOT NULL AND EXISTS { MATCH (:User {id: $user_id})-[:JOINED]->(p) } AS joined
-        ORDER BY id ASC
+               $user_id IS NOT NULL AND EXISTS { MATCH (:User {id: $user_id})-[:JOINED]->(p) } AS joined,
+               graph_score
+        ORDER BY graph_score DESC, p.id ASC
         """
-        result = session.run(cypher, q=q.strip(), user_id=user_id)
-        
+        result = session.run(cypher, q=q.strip(), user_id=user_id, domain=domain)
+
         projects = []
         for record in result:
             projects.append({
@@ -101,7 +117,8 @@ def search_projects(q: str = Query(...), user_id: Optional[str] = None):
                 "domain": record["domain"] or "Engineering",
                 "skills": record["skills"] or [],
                 "technologies": record["technologies"] or [],
-                "joined": record["joined"]
+                "joined": record["joined"],
+                "graph_score": record["graph_score"]
             })
         return projects
 
